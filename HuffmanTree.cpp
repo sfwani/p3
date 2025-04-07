@@ -149,36 +149,6 @@ std::string HuffmanTree::serializeTree() const {
     return serialized;
 }
 
-// Helper method to rebuild tree from serialized string
-HuffmanNode* HuffmanTree::rebuildTree(const std::string& serializedTree, int& index) {
-    if (index < 0 || index >= static_cast<int>(serializedTree.length())) return nullptr;
-    
-    // Read the next character
-    char nodeType = serializedTree[index--];
-    
-    // If it's a branch node
-    if (nodeType == 'B') {
-        HuffmanNode* node = new HuffmanNode('\0', 0);
-        
-        // Right comes first since we're going backwards
-        node->right = rebuildTree(serializedTree, index);
-        node->left = rebuildTree(serializedTree, index);
-        
-        return node;
-    }
-    // If it's a leaf node
-    else if (nodeType == 'L') {
-        // Make sure we don't go out of bounds
-        if (index < 0) return nullptr;
-        
-        // Read the character
-        char c = serializedTree[index--];
-        return new HuffmanNode(c, 0);
-    }
-    
-    return nullptr;
-}
-
 // Decompress code using serialized tree
 std::string HuffmanTree::decompress(const std::string inputCode, const std::string serializedTree) {
     // Clear old tree
@@ -189,33 +159,59 @@ std::string HuffmanTree::decompress(const std::string inputCode, const std::stri
     if (inputCode.empty() || serializedTree.empty()) return "";
     
     // Rebuild the tree from serialized string
-    int index = serializedTree.length() - 1;
-    root = rebuildTree(serializedTree, index);
+    std::stack<HuffmanNode*> nodeStack;
     
-    // Check if tree was rebuilt correctly
-    if (root == nullptr) return "";
+    for (size_t i = 0; i < serializedTree.length(); i++) {
+        if (serializedTree[i] == 'L') {
+            // Leaf node - next character is the actual character
+            i++; // Move to the character
+            if (i < serializedTree.length()) {
+                HuffmanNode* leaf = new HuffmanNode(serializedTree[i], 0);
+                nodeStack.push(leaf);
+            }
+        } 
+        else if (serializedTree[i] == 'B') {
+            // Branch node - pop two nodes and create a parent
+            if (nodeStack.size() >= 2) {
+                HuffmanNode* right = nodeStack.top();
+                nodeStack.pop();
+                HuffmanNode* left = nodeStack.top();
+                nodeStack.pop();
+                
+                HuffmanNode* branch = new HuffmanNode('\0', 0);
+                branch->left = left;
+                branch->right = right;
+                nodeStack.push(branch);
+            }
+        }
+    }
+    
+    // The root should be the only node left in the stack
+    if (!nodeStack.empty()) {
+        root = nodeStack.top();
+        nodeStack.pop();
+    }
     
     // Decompress the code using the tree
     std::string decompressed;
     HuffmanNode* current = root;
     
     for (char bit : inputCode) {
-        // Navigate based on bit, with null checks
+        // Check if current is nullptr
+        if (current == nullptr) {
+            break;
+        }
+        
+        // Navigate based on bit
         if (bit == '0') {
-            if (current->left == nullptr) {
-                // Something wrong with tree structure - corrupted code or tree
-                return "";
-            }
             current = current->left;
-        } else if (bit == '1') {
-            if (current->right == nullptr) {
-                // Something wrong with tree structure - corrupted code or tree
-                return "";
-            }
-            current = current->right;
         } else {
-            // Invalid bit in code - not 0 or 1
-            return "";
+            current = current->right;
+        }
+        
+        // Check if current is nullptr after navigation
+        if (current == nullptr) {
+            break;
         }
         
         // If we reached a leaf node
